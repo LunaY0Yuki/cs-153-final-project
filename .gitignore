@@ -1,2 +1,4 @@
 *.DS_Store
 /images
+/videos
+/via_annotations
