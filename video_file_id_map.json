@@ -1,0 +1,93 @@
+{
+    "filenames": [
+        "20200805_OneSharkSUPFollowsKids",
+        "20200805_OneSharkSUPSurfers",
+        "2020731_JWSSeaLIonSUP",
+        "20210121_SUPNexttoShark",
+        "20210121_SharkNearTwoSurfers",
+        "20210401_ThreeSharksVeryCloseSurfers",
+        "20210401_ThreeSurfersTwoSharks",
+        "20210403_SharkAndBodyboarders",
+        "20210615_SharkUnderSurfer",
+        "20210812_JamesElizabethBrianWithShark",
+        "20210812_JamesWithShark",
+        "20210812_JamesWithShark2",
+        "20210812_JamesWithShark3",
+        "20210812_SharkOutsideLineUP",
+        "20210910_SUPInteraction",
+        "20210910_SharkInsideLineUp_GreatInteraction",
+        "20210910_SharkSpeedingPastSurfers",
+        "20210910_SharkSwimmerSurfer",
+        "20210910_SurferTowardsShark",
+        "DJI_0386"
+    ],
+    "id_map": {
+        "20200805_OneSharkSUPFollowsKids": [
+            0
+        ],
+        "20200805_OneSharkSUPSurfers": [
+            1
+        ],
+        "2020731_JWSSeaLIonSUP": [
+            2
+        ],
+        "20210121_SUPNexttoShark": [
+            3,
+            4
+        ],
+        "20210121_SharkNearTwoSurfers": [
+            5
+        ],
+        "20210401_ThreeSharksVeryCloseSurfers": [
+            6,
+            7
+        ],
+        "20210401_ThreeSurfersTwoSharks": [
+            8
+        ],
+        "20210403_SharkAndBodyboarders": [
+            9,
+            10
+        ],
+        "20210615_SharkUnderSurfer": [
+            11
+        ],
+        "20210812_JamesElizabethBrianWithShark": [
+            12
+        ],
+        "20210812_JamesWithShark": [
+            13,
+            16
+        ],
+        "20210812_JamesWithShark2": [
+            14
+        ],
+        "20210812_JamesWithShark3": [
+            15
+        ],
+        "20210812_SharkOutsideLineUP": [
+            17,
+            18
+        ],
+        "20210910_SUPInteraction": [
+            19
+        ],
+        "20210910_SharkInsideLineUp_GreatInteraction": [
+            20,
+            21
+        ],
+        "20210910_SharkSpeedingPastSurfers": [
+            22,
+            23
+        ],
+        "20210910_SharkSwimmerSurfer": [
+            24
+        ],
+        "20210910_SurferTowardsShark": [
+            25
+        ],
+        "DJI_0386": [
+            26
+        ]
+    }
+}
