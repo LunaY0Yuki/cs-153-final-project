@@ -1,4 +1,3 @@
-import numpy as np
 from datetime import date
 import os
 import json
@@ -7,12 +6,26 @@ from math import ceil
 import traceback
 from merge_coco.merge import combine
 
-ANN_AREA_FILTER_THRESHOLD = 5
+"""
+Constant declaration (from config file)
+"""
+with open("./config.json", "r") as f:
+  config_json = json.load(f)
+
+# if the area of a bounding box is below this threshold, would not get included in the converted coco annotation json
+ANN_AREA_FILTER_THRESHOLD = config_json["ann_area_filter_threshold"]
+LOGS_DIR = config_json["logs_dir"]
 
 """
 ====================================================================================================
 
     Main functions to run
+      - convertAllViaToCoco
+          if you want to convert ALL the via annotations in the via jsons directory to corresponding coco jsons
+      - convertToCocoFormat
+          if you want to convert ONE via annotation json to the corresponding coco json
+      - mergeAllCoco
+          if you want to merge ALL the coco annotations into ONE coco annotation file
 
 ====================================================================================================
 """
@@ -67,13 +80,20 @@ def convertAllViaToCoco(via_json_dir, video_dir, coco_json_dir):
 
     
     if via_json_with_errors != []:
+      with open(f"{os.path.join(LOGS_DIR, 'via2coco_error_log.txt')}", "w") as f:
         print("------------ List of VIA Files that Have Errors When Converting ------------")
         print("     format: (json file path, video id that should be used)")
+
+        f.write("------------ List of VIA Files that Have Errors When Converting ------------\n")
+        f.write("     format: (json file path, video id that should be used)\n")
 
         for fpath, file_id, trace_error in via_json_with_errors:
             print((fpath, file_id))
             print(trace_error)
             print()
+
+            f.write(f"{(fpath, file_id)}\n")
+            f.write(f"{trace_error}\n\n")
 
 
 """
@@ -135,6 +155,66 @@ def convertToCocoFormat(via_json_path, video_dir, coco_json_dir, file_id):
 
   with open(coco_json_save_path, 'w') as f:
     json.dump(coco_json, f)
+
+
+"""
+Use the Coco merge function from 
+
+And merge all the coco json files together into one coco json
+
+Parameters:
+  coco_json_dir - string, path to the coco json
+  merged_save_path - string, path to save the merged coco json
+"""
+def mergeAllCoco(coco_json_dir, merged_save_path):
+    coco_json_files = []
+
+    for dirpath, _, filenames in os.walk(coco_json_dir):
+        for f in filenames:
+            if os.path.splitext(f)[1] == ".json":
+                coco_json_files.append(os.path.join(dirpath, f))
+    
+    # make the first coco json file the "starting" merged file
+    merged_coco_file = coco_json_files[0]
+
+    coco_json_with_errors = []
+
+    for i in range(1, len(coco_json_files)):
+        try: 
+            coco_json_path = coco_json_files[i]
+
+            if i != 1:
+                merged_coco_file = merged_save_path
+                
+            combine(merged_coco_file, coco_json_path, merged_save_path)
+        except:
+            trace_error = traceback.format_exc()
+            
+            print(trace_error)
+
+            print("xxxxxxxxxxx WARNING! xxxxxxxxxxx")
+            print(f"xxxxxxx filename = {coco_json_path} xxxxxxx")
+            print()
+            
+            coco_json_with_errors.append((coco_json_path, trace_error))
+
+            pass
+    
+    if coco_json_with_errors != []:
+      with open(f"{os.path.join(LOGS_DIR, 'cocomerge_error_log.txt')}", "w") as f:
+        print("------------ List of COCO Files that Have Errors When Merging ------------")
+        print("     format: (coco json filename, error message)")
+
+        f.write("------------ List of COCO Files that Have Errors When Merging ------------\n")
+        f.write("     format: (coco json filename, error message)\n")
+        for p in coco_json_with_errors:
+            fn, em = p
+            print(fn)
+            print(em)
+            print()
+
+            f.write(f"{fn}\n")
+            f.write(f"{em}\n\n")
 
 
 """
@@ -280,7 +360,7 @@ def createCocoImageDict(w, h, highest_z, video_filename, idGenerator):
   for z in range(0, ceil(highest_z * 10)):
     # z is essentially the frame number
     image_num_in_filename = str(z)
-    image_num_in_filename = image_num_in_filename.zfill(idGenerator.digits_for_image)
+    image_num_in_filename = image_num_in_filename.zfill(idGenerator.digits_for_obj)
 
     image_filename = f"{video_filename}_" + image_num_in_filename + ".jpg"
     
@@ -299,12 +379,6 @@ def createCocoImageDict(w, h, highest_z, video_filename, idGenerator):
 
 
 """
-- get the time stamp so that we can create the annotation id (how to deal with the object annoation part)
-- have a dictionary (we could initalize it): for each time stamp (key), we keep track of the curr object annotation id that we should use
-- steal; "area": float, "bbox": [x,y,width,height],
-- iscrowd = 0
-- errorhandling
-
 Generate a list of object annotation in Coco format based on the original via annotation
 
 Meanwhile, also filter and clean the original via annotation based on the following rules.
@@ -414,10 +488,17 @@ def createCocoLisenses():
 """
 
 """
-Based on the attribute dictionary {attrDict} for a particular object attribute 
+Based on the attribute dictionary {attr_dict} for a particular object annotation, 
+  find the category id (in the coco format) and the object id (in the original via format) for that object
+
+Parameter:
+  attr_dict - dictionary containing annotation attribute information for the original via annotation
+    acquired from using the key "av" in a specific via object annotation
+  attr_config_dict - dictionary containing information about what attributes are being used in the via annotation
+    acquired from using the key "attribute" in the overall via annotation
 """
-def getLabelAndId(attrDict, attrConfigDict):
-    label = None
+def getLabelAndId(attr_dict, attr_config_dict):
+    label = None  # the category of a object
     object_id = None
 
     object_present_exist = False
@@ -427,20 +508,24 @@ def getLabelAndId(attrDict, attrConfigDict):
     object_label_exist = False
     object_label_attr_key = ""
 
+    # map the categories/labels in the via annotation to the expected Coco's version
+    #   where 1 = shark, 2 = human
     mapToStandardLabel = {}
 
-    for k in attrDict:
-      if attrConfigDict[k]["aname"] == "object_present":
+    # examine the attributes that a object annotation has
+    for k in attr_dict:
+      if attr_config_dict[k]["aname"] == "object_present":
           object_present_exist = True
           object_present_attr_key = k
-      elif attrConfigDict[k]["aname"] == "object_id":
+      elif attr_config_dict[k]["aname"] == "object_id":
           object_id_exist = True
           object_id_attr_key = k
-      elif attrConfigDict[k]["aname"] == "object_label":
+      elif attr_config_dict[k]["aname"] == "object_label":
           object_label_exist = True
           object_label_attr_key = k
           
-          cat_options = attrConfigDict[k]["options"]
+          # if it has object labels, we need to map the object labels to the right ones in coco format
+          cat_options = attr_config_dict[k]["options"]
           for og_cat_id in cat_options:
             if "shark" in cat_options[og_cat_id] or "0" == cat_options[og_cat_id]:
               mapToStandardLabel[int(og_cat_id)] = 1
@@ -450,46 +535,82 @@ def getLabelAndId(attrDict, attrConfigDict):
               print(f"not recognizable options in cat_options: {cat_options}")
               print("error at getLabelAndId")
       else:
-          print(f"attrDict key: {k}")
+          print(f"attr_dict key: {k}")
           print("error at getLabelAndId")
 
     # default map
-    #   shark = 0 -> 1
-    #   human = 1 -> 2
-    if len(mapToStandardLabel):
+    #   shark: 0 -> 1
+    #   human: 1 -> 2
+    if len(mapToStandardLabel) == 0:
       mapToStandardLabel = {0:1, 1:2}
 
+    # priortize object label, if it exists, we extract category id / label from object label
     if object_label_exist:
-        original_label = int(attrDict[object_label_attr_key])
+        original_label = int(attr_dict[object_label_attr_key])
         label = mapToStandardLabel[original_label]
+    # if object present exists  (which is a text label, which is not supposed to be used) and object label doesnt'
+    #   extract from object present
     elif object_present_exist:
-        if "shark" in attrDict[object_present_attr_key] or "0" == attrDict[object_present_attr_key]:
-            label = 1  # coco's 0 category id is 
-        elif "human" in attrDict[object_present_attr_key] or "1" == attrDict[object_present_attr_key]:
+        if "shark" in attr_dict[object_present_attr_key] or "0" == attr_dict[object_present_attr_key]:
+            label = 1
+        elif "human" in attr_dict[object_present_attr_key] or "1" == attr_dict[object_present_attr_key]:
             label = 2
         else:
-            print(f"cannot identify object id based on: { attrDict[object_present_attr_key]}")
+            print(f"cannot identify object id based on: { attr_dict[object_present_attr_key]}")
     else:
         print("cannot use any attribute to find label")
         print("error at getLabelAndId")
 
     if object_id_exist:
-      object_id = int(attrDict[object_id_attr_key])
+      object_id = int(attr_dict[object_id_attr_key])
 
     return label, object_id
 
+
+"""
+Inspired from the via2coco convertor provided by VIA
+
+Give the xy_region in the original via annotation, convert it into the segmentation needed in the via format
+"""
 def getSegmentation(xy_region):
   _, x, y, w, h = xy_region
   return [[x, y, x+w, y, x+w, y+h, x, y+h]]
 
+
+"""
+Inspired from the via2coco convertor provided by VIA
+
+Give the xy_region in the original via annotation, convert it into the bounding box needed in the via format
+"""
 def getBBox(xy_region):
   _, x, y, w, h = xy_region
   return [x, y, w, h]
 
+
+"""
+Inspired from the via2coco convertor provided by VIA
+
+Give the xy_region in the original via annotation, calculate the area of the bounding box (assume to be rectangular)
+"""
 def getArea(xy_region):
   _, _, _, w, h = xy_region
   return w * h
 
+
+"""
+Return the current object id that the object annotation has
+  and update the curr_obj_id_dict
+
+Parameter:
+  curr_time - float, the current time of the frame (in second)
+  cat_id - int, the category id of the object
+  og_obj_id - int, the orginal object id from the via object annotation
+  curr_obj_id_dict - dictionary, keeps track of the object id that we have seen so far and the current object id to be used
+
+Return:
+  curr_obj_id - int, the actual object id that the corresponding object annotation in coco format would use
+  curr_obj_id_dict - dictionary, updated curr_obj_id_dict (with the updated curr_obj_id and existing_obj_ids)
+"""
 def getCurrObjId(curr_time, cat_id, og_obj_id, curr_obj_id_dict):
   curr_time_int = int(curr_time * 10)
 
@@ -497,66 +618,21 @@ def getCurrObjId(curr_time, cat_id, og_obj_id, curr_obj_id_dict):
     print(f"Ann (cat_id={cat_id}, og_obj_id={og_obj_id}, t={curr_time}) already got added, so got ignored")
     return None, curr_obj_id_dict
   else:
+    # add the original object id to the list that contains ones that we have already seen
     curr_obj_id_dict[curr_time_int]["existing_obj_ids"][cat_id] += [og_obj_id]
+    # get the current object id for the current object annotation
     curr_obj_id = curr_obj_id_dict[curr_time_int]["curr_obj_id"]
+    # update the current object id for the next object
     curr_obj_id_dict[curr_time_int]["curr_obj_id"] += 1
+
     return curr_obj_id, curr_obj_id_dict
 
 
-# https://stackoverflow.com/questions/42021972/truncating-decimal-digits-numpy-array-of-floats
-def trunc(values, decs=1):
-    return np.trunc(values*10**decs)/(10**decs)
-
-
-
-
-
+"""
+Given a string that contains a filepath, return the filename without the path and extension
+"""
 def getFilenameWithoutPath(file_path):
   path_without_extension = os.path.splitext(file_path)[0]
 
   return path_without_extension.split("/")[-1]
 
-
-            
-
-def mergeAllCoco(coco_json_dir, merged_save_path):
-    coco_json_files = []
-
-    for dirpath, _, filenames in os.walk(coco_json_dir):
-        for f in filenames:
-            if os.path.splitext(f)[1] == ".json":
-                coco_json_files.append(os.path.join(dirpath, f))
-    
-    merged_coco_file = coco_json_files[0]
-
-    coco_json_with_errors = []
-
-    for i in range(1, len(coco_json_files)):
-        try: 
-            coco_json_path = coco_json_files[i]
-
-            if i != 1:
-                merged_coco_file = merged_save_path
-                
-            combine(merged_coco_file, coco_json_path, merged_save_path)
-        except:
-            trace_error = traceback.format_exc()
-            
-            print(trace_error)
-
-            print("xxxxxxxxxxx WARNING! xxxxxxxxxxx")
-            print(f"xxxxxxx filename = {coco_json_path} xxxxxxx")
-            print()
-            
-            coco_json_with_errors.append((coco_json_path, trace_error))
-
-            pass
-
-    
-    print("------------ List of COCO Files that Have Errors When Converting ------------")
-    print("     format: (coco json filename, error message)")
-    for p in coco_json_with_errors:
-        fn, em = p
-        print(fn)
-        print(em)
-        print()
